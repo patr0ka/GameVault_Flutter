@@ -1,11 +1,10 @@
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'dart:convert';
 import 'dart:io';
 
 class RAWGApiService {
-  String get _token => dotenv.env['RAWG_API_KEY']?.trim() ?? '';
+  static const String _token = String.fromEnvironment('RAWG_API_KEY');
 
   Future<Map<String, dynamic>> listarJogos({int page = 1, int pageSize = 20}) {
     final uri = _buildUri(
@@ -92,10 +91,6 @@ class RAWGApiService {
   }
 
   Future<Map<String, dynamic>> _fazerRequisicao(Uri uri) async {
-    if (_token.isEmpty) {
-      throw StateError('Preencha RAWG_API_KEY no arquivo .env.');
-    }
-
     try {
       final response = await http.get(uri);
 
