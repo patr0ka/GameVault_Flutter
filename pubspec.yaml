@@ -43,6 +43,7 @@ dependencies:
   sqflite: ^2.4.6
   path: ^1.9.1
   connectivity_plus: ^7.3.2
+  flutter_dotenv: ^6.0.2
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.0
@@ -84,6 +85,7 @@ flutter:
   assets:
     - assets/icon/
     - assets/animation/
+    - .env
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

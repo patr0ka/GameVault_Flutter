@@ -21,21 +21,28 @@ Aplicativo Flutter para organizar uma biblioteca pessoal de jogos. O projeto int
 ## Como executar
 
 1. Instale o Flutter e configure um emulador ou dispositivo Android.
-2. Na pasta do projeto, execute:
+2. Crie o arquivo local `.env` a partir do exemplo:
+
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+3. Abra `.env` e substitua o valor de `RAWG_API_KEY` pela chave da sua conta RAWG.
+4. Na pasta do projeto, execute:
 
    ```powershell
    flutter pub get
-   flutter run --dart-define=RAWG_API_KEY=SUA_CHAVE_RAWG
+   flutter run
    ```
 
-Substitua `SUA_CHAVE_RAWG` pela chave da sua conta RAWG. A chave não fica salva no código do repositório.
+O arquivo `.env` é ignorado pelo Git. O valor é empacotado no aplicativo durante o build, portanto não use esse arquivo para senhas ou chaves privadas.
 
 O projeto contém a configuração Firebase usada no desenvolvimento. Para usar outro projeto Firebase, configure-o com FlutterFire CLI e confira as regras do Firestore para que cada usuário acesse somente a própria biblioteca.
 
 Para gerar um APK:
 
 ```powershell
-flutter build apk --release --dart-define=RAWG_API_KEY=SUA_CHAVE_RAWG
+flutter build apk --release
 ```
 
 ## Autor
