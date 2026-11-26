@@ -4,13 +4,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import '../database/helper/game_helper.dart';
 import '../database/model/game_model.dart';
 import '../service/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'buscar_jogos_page.dart';
-import 'detalhes_jogo_page.dart';
 import 'generos_page.dart';
 import 'lista_jogos_page.dart';
 import 'plataformas_page.dart';
@@ -35,6 +36,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _loadingLocal = true;
   bool _isOnline = false;
   bool _isSyncing = false;
+  DateTime _focusedCalendarDay = DateTime.now();
+  DateTime? _selectedCalendarDay = DateTime.now();
 
   static const _statuses = ['Quero jogar', 'Jogando', 'Concluído'];
 
@@ -59,7 +62,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  void verificaRetornoUser(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _verificarConexao();
     }
@@ -125,7 +128,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (game.remoteId != null) {
             await _firestoreService.delete(game.remoteId!);
           }
-          await _gameHelper.markSynced(localId);
           await _gameHelper.removeLocalGame(localId);
           continue;
         }
@@ -137,7 +139,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         }
 
         await _firestoreService.saveAt(remoteId, game);
-        await _gameHelper.markSynced(localId);
         await _gameHelper.removeLocalGame(localId);
       }
 
@@ -162,15 +163,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
   }
 
-  void _abrirPagina(Widget pagina) {
-    Navigator.push(context, MaterialPageRoute<void>(builder: (_) => pagina));
-  }
-
   Widget _atalho(String texto, IconData icone, Widget pagina) {
     return ActionChip(
       avatar: Icon(icone, size: 18, color: AppTheme.accent),
       label: Text(texto),
-      onPressed: () => _abrirPagina(pagina),
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute<void>(builder: (_) => pagina),
+      ),
     );
   }
 
@@ -228,18 +228,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   return;
                 }
 
-                final mudouNome = jogo != null && name != jogo.name;
+                final agora = DateTime.now().millisecondsSinceEpoch;
+                final iniciouAgora =
+                    status == 'Jogando' &&
+                    (jogo == null || jogo.status != status);
+                final concluiuAgora =
+                    status == 'Concluído' &&
+                    (jogo == null || jogo.status != status);
                 final game = Game(
                   id: jogo?.id,
                   userId: userId,
-                  rawgId: mudouNome ? null : jogo?.rawgId,
+                  rawgId: jogo?.rawgId,
                   name: name,
                   status: status,
-                  backgroundImage: mudouNome ? null : jogo?.backgroundImage,
+                  backgroundImage: jogo?.backgroundImage,
                   createdAt: jogo?.createdAt,
-                  updatedAt: DateTime.now().millisecondsSinceEpoch,
                   remoteId: jogo?.remoteId,
-                  synced: false,
+                  startedAt: jogo?.startedAt ?? (iniciouAgora ? agora : null),
+                  completedAt:
+                      jogo?.completedAt ?? (concluiuAgora ? agora : null),
                 );
 
                 try {
@@ -262,7 +269,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
 
-    _nameController.clear();
     if (salvo != true) return;
 
     await _carregarPendentes();
@@ -300,6 +306,134 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       updatedAt: _dataEmMilissegundos(data['updatedAt']),
       remoteId: document.id,
       synced: true,
+      startedAt: _dataEmMilissegundos(data['startedAt']),
+      completedAt: _dataEmMilissegundos(data['completedAt']),
+    );
+  }
+
+  bool _mesmoDia(DateTime primeiro, DateTime segundo) {
+    return primeiro.year == segundo.year &&
+        primeiro.month == segundo.month &&
+        primeiro.day == segundo.day;
+  }
+
+  List<_EventoBiblioteca> _eventosDosJogos(List<Game> jogos) {
+    final eventos = <_EventoBiblioteca>[];
+
+    for (final jogo in jogos) {
+      if (jogo.createdAt != null) {
+        eventos.add(
+          _EventoBiblioteca(
+            data: DateTime.fromMillisecondsSinceEpoch(jogo.createdAt!),
+            titulo: 'Adicionado à biblioteca',
+            jogo: jogo.name,
+            icone: Icons.add_circle_outline,
+          ),
+        );
+      }
+      if (jogo.startedAt != null) {
+        eventos.add(
+          _EventoBiblioteca(
+            data: DateTime.fromMillisecondsSinceEpoch(jogo.startedAt!),
+            titulo: 'Começou a jogar',
+            jogo: jogo.name,
+            icone: Icons.play_arrow,
+          ),
+        );
+      }
+      if (jogo.completedAt != null) {
+        eventos.add(
+          _EventoBiblioteca(
+            data: DateTime.fromMillisecondsSinceEpoch(jogo.completedAt!),
+            titulo: 'Concluiu o jogo',
+            jogo: jogo.name,
+            icone: Icons.check_circle_outline,
+          ),
+        );
+      }
+    }
+
+    return eventos;
+  }
+
+  List<_EventoBiblioteca> _eventosDoDia(DateTime dia, List<Game> jogos) {
+    return _eventosDosJogos(jogos)
+        .where((evento) => _mesmoDia(evento.data, dia))
+        .toList();
+  }
+
+  Widget _calendario(List<Game> jogos) {
+    final diaSelecionado = _selectedCalendarDay ?? DateTime.now();
+    final eventosSelecionados = _eventosDoDia(diaSelecionado, jogos);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Calendário da biblioteca',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 8),
+        Card(
+          color: AppTheme.card,
+          child: TableCalendar<_EventoBiblioteca>(
+            locale: 'pt_BR',
+            firstDay: DateTime.utc(2000, 1, 1),
+            lastDay: DateTime.utc(2100, 12, 31),
+            focusedDay: _focusedCalendarDay,
+            selectedDayPredicate: (dia) => _mesmoDia(dia, diaSelecionado),
+            eventLoader: (dia) => _eventosDoDia(dia, jogos),
+            onDaySelected: (diaSelecionado, diaFocado) {
+              setState(() {
+                _selectedCalendarDay = diaSelecionado;
+                _focusedCalendarDay = diaFocado;
+              });
+            },
+            onPageChanged: (diaFocado) => _focusedCalendarDay = diaFocado,
+            headerStyle: const HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+            ),
+            calendarStyle: const CalendarStyle(
+              outsideDaysVisible: false,
+              selectedDecoration: BoxDecoration(
+                color: AppTheme.accent,
+                shape: BoxShape.circle,
+              ),
+              markerDecoration: BoxDecoration(
+                color: AppTheme.accent,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                DateFormat('EEEE, d MMMM', 'pt_BR').format(diaSelecionado),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              if (eventosSelecionados.isEmpty)
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Nenhum evento nesta data.'),
+                )
+              else
+                ...eventosSelecionados.map(
+                  (evento) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(evento.icone, color: AppTheme.accent),
+                    title: Text(evento.titulo),
+                    subtitle: Text(evento.jogo),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -343,42 +477,57 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (snapshot.hasError && jogos.isEmpty) {
-          return const ListTile(
-            title: Text('Não foi possível carregar a biblioteca.'),
-          );
-        }
-
-        if (jogos.isEmpty) {
-          return const ListTile(title: Text('Sua biblioteca está vazia.'));
-        }
-
         return Column(
-          children: jogos.map((game) {
-            return Card(
-              color: AppTheme.card,
-              child: ListTile(
-                leading: _imagemJogo(game.backgroundImage),
-                title: Text(game.name),
-                subtitle: Text(game.status),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: 'Editar',
-                      onPressed: () => _abrirFormulario(jogo: game),
-                      icon: const Icon(Icons.edit_outlined),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _calendario(jogos),
+            const Divider(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Minha biblioteca',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                if (_pendingGames.isNotEmpty)
+                  Text('${_pendingGames.length} pendente(s)'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (snapshot.hasError && jogos.isEmpty)
+              const ListTile(
+                title: Text('Não foi possível carregar a biblioteca.'),
+              )
+            else if (jogos.isEmpty)
+              const ListTile(title: Text('Sua biblioteca está vazia.'))
+            else
+              ...jogos.map(
+                (game) => Card(
+                  color: AppTheme.card,
+                  child: ListTile(
+                    leading: _imagemJogo(game.backgroundImage),
+                    title: Text(game.name),
+                    subtitle: Text(game.status),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Editar',
+                          onPressed: () => _abrirFormulario(jogo: game),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                        IconButton(
+                          tooltip: 'Excluir',
+                          onPressed: () => _removerJogo(game),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      tooltip: 'Excluir',
-                      onPressed: () => _removerJogo(game),
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            );
-          }).toList(),
+          ],
         );
       },
     );
@@ -406,12 +555,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final nome = user?.displayName?.trim();
-    final saudacao = nome != null && nome.isNotEmpty
-        ? nome
-        : user?.email ?? 'jogador';
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('GameVault'),
@@ -437,35 +580,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Olá, $saudacao', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          Text('RAWG', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 4,
             children: [
               _atalho('Lista', Icons.videogame_asset, const ListaJogosPage()),
               _atalho('Buscar', Icons.search, const BuscarJogosPage()),
-              _atalho('Detalhes', Icons.info_outline, const DetalhesJogoPage()),
               _atalho('Gêneros', Icons.category, const GenerosPage()),
               _atalho('Plataformas', Icons.devices, const PlataformasPage()),
             ],
           ),
-          const Divider(height: 32),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Minha biblioteca',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              if (_pendingGames.isNotEmpty)
-                Text('${_pendingGames.length} pendente(s)'),
-            ],
-          ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           _biblioteca(),
         ],
       ),
@@ -475,4 +600,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+class _EventoBiblioteca {
+  const _EventoBiblioteca({
+    required this.data,
+    required this.titulo,
+    required this.jogo,
+    required this.icone,
+  });
+
+  final DateTime data;
+  final String titulo;
+  final String jogo;
+  final IconData icone;
 }

@@ -1,10 +1,11 @@
-import 'package:http/http.dart' as http;
-
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
+
 class RAWGApiService {
-  static const String _token = String.fromEnvironment('RAWG_API_KEY');
+  String get _token => dotenv.get('RAWG_API_KEY');
 
   Future<Map<String, dynamic>> listarJogos({int page = 1, int pageSize = 20}) {
     final uri = _buildUri(

@@ -33,7 +33,7 @@ class GameHelper {
 
     return openDatabase(
       databasePath,
-      version: 2,
+      version: 3,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE $gameTable (
@@ -47,7 +47,9 @@ class GameHelper {
             $gameUpdatedAtColumn INTEGER NOT NULL,
             $gameRemoteIdColumn TEXT,
             $gameSyncedColumn INTEGER NOT NULL DEFAULT 0,
-            $gameDeletedAtColumn INTEGER
+            $gameDeletedAtColumn INTEGER,
+            $gameStartedAtColumn INTEGER,
+            $gameCompletedAtColumn INTEGER
           )
         ''');
       },
@@ -62,6 +64,14 @@ class GameHelper {
           );
           await database.execute(
             'ALTER TABLE $gameTable ADD COLUMN $gameDeletedAtColumn INTEGER',
+          );
+        }
+        if (oldVersion < 3) {
+          await database.execute(
+            'ALTER TABLE $gameTable ADD COLUMN $gameStartedAtColumn INTEGER',
+          );
+          await database.execute(
+            'ALTER TABLE $gameTable ADD COLUMN $gameCompletedAtColumn INTEGER',
           );
         }
       },

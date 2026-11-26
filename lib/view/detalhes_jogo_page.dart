@@ -4,9 +4,9 @@ import '../service/rawg_service.dart';
 import '../theme/app_theme.dart';
 
 class DetalhesJogoPage extends StatefulWidget {
-  const DetalhesJogoPage({super.key, this.gameId});
+  const DetalhesJogoPage({super.key, required this.gameId});
 
-  final int? gameId;
+  final int gameId;
 
   @override
   State<DetalhesJogoPage> createState() => _DetalhesJogoPageState();
@@ -14,97 +14,38 @@ class DetalhesJogoPage extends StatefulWidget {
 
 class _DetalhesJogoPageState extends State<DetalhesJogoPage> {
   final _api = RAWGApiService();
-  final _campoId = TextEditingController();
   Future<Map<String, dynamic>>? _detalhe;
 
   @override
   void initState() {
     super.initState();
-    if (widget.gameId != null) {
-      _campoId.text = widget.gameId.toString();
-      _carregar(widget.gameId!);
-    }
-  }
-
-  void _carregar(int id) {
-    setState(() {
-      _detalhe = _api.buscarJogoPorId(id);
-    });
-  }
-
-  void _buscarPorId() {
-    final id = int.tryParse(_campoId.text.trim());
-    if (id == null || id <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe um ID numérico maior que zero.')),
-      );
-      return;
-    }
-    _carregar(id);
-  }
-
-  @override
-  void dispose() {
-    _campoId.dispose();
-    super.dispose();
+    _detalhe = _api.buscarJogoPorId(widget.gameId);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Detalhes do jogo')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _campoId,
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => _buscarPorId(),
-                    decoration: const InputDecoration(
-                      labelText: 'ID do jogo',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _detalhe,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Não foi possível carregar o jogo.\n${snapshot.error}',
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _buscarPorId,
-                  child: const Icon(Icons.search),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _detalhe == null
-                ? const Center(child: Text('Informe o ID de um jogo.'))
-                : FutureBuilder<Map<String, dynamic>>(
-                    future: _detalhe,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Text(
-                              'Não foi possível carregar o jogo.\n${snapshot.error}',
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        );
-                      }
-                      final jogo = snapshot.data ?? {};
-                      return _conteudoJogo(jogo);
-                    },
-                  ),
-          ),
-        ],
+              ),
+            );
+          }
+          final jogo = snapshot.data ?? {};
+          return _conteudoJogo(jogo);
+        },
       ),
     );
   }

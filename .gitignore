@@ -52,6 +52,7 @@ app.*.map.json
 key.properties
 .env
 .env.*
+!.env.example
 
 # Widget Preview related
 .widget_preview/
